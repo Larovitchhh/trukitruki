@@ -1,39 +1,30 @@
 import pkg from '@stacks/transactions';
-import netPkg from '@stacks/network';
+import { StacksMainnet } from '@stacks/network';
+import * as bip39 from 'bip39';
+import { BIP32Factory } from 'bip32';
+import * as ecc from 'tiny-secp256k1';
 import fetch from 'node-fetch';
 
-const { StacksMainnet } = netPkg;
+const bip32 = BIP32Factory(ecc);
 
 async function ejecutar() {
-  console.log("=== BUSCANDO FUNCIÓN DE CLAVE EN EL PAQUETE ===");
+  console.log("=== ARRANQUE MANUAL (BYPASS STACKS LIB) ===");
   
   try {
-    // 1. Intentamos localizar la función de derivación manualmente
-    let deriveFn = pkg.mnemonicToStxPrivKey || 
-                   pkg.generatePrivateKeyFromMnemonic || 
-                   (pkg.default && pkg.default.mnemonicToStxPrivKey);
+    const frase = "brown weird curve old found clog super vendor pen keep size giant";
+    
+    // Generamos la clave privada manualmente (Ruta de Stacks: m/44'/5757'/0'/0/0)
+    const seed = await bip39.mnemonicToSeed(frase);
+    const root = bip32.fromSeed(seed);
+    const child = root.derivePath("m/44'/5757'/0'/0/0");
+    const clavePrivada = child.privateKey.toString('hex');
+    
+    console.log("✅ Clave privada generada manualmente.");
 
-    // Si sigue siendo undefined, buscamos en las claves del objeto
-    if (!deriveFn) {
-        const keys = Object.keys(pkg);
-        const foundKey = keys.find(k => k.toLowerCase().includes('mnemonic') && k.toLowerCase().includes('priv'));
-        if (foundKey) deriveFn = pkg[foundKey];
-    }
-
-    if (typeof deriveFn !== 'function') {
-        console.log("Contenido del paquete:", Object.keys(pkg));
-        throw new Error("No existe ninguna función de derivación en este paquete.");
-    }
-
-    const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
-    const clavePrivada = await deriveFn(FRASE);
-    console.log("✅ Clave generada con éxito.");
-
-    const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
+    const direccion = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
     const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
-    console.log("Consultando Nonce...");
-    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${direccion}?proof=0`);
     const data = await res.json();
     let nonce = data.nonce || 0;
     console.log("✅ Nonce:", nonce);
@@ -53,7 +44,7 @@ async function ejecutar() {
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 75000, 
+          fee: 80000, 
           network: red,
           anchorMode: 1, 
           postConditionMode: 0x01
