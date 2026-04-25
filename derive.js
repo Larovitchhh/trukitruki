@@ -1,7 +1,7 @@
 import { mnemonicToStxPrivKey } from '@stacks/transactions';
 
 // REEMPLAZA ESTO con tus 12 o 24 palabras
-const mnemonic = "tu semilla de doce palabras aqui debe ir completa y en orden";
+const mnemonic = "brown weird curve old found clog super vendor pen keep size giant";
 
 async function derive() {
   try {
