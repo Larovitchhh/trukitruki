@@ -5,7 +5,7 @@ import { StacksMainnet } from '@stacks/network';
 import fetch from 'node-fetch';
 
 // --- CONFIGURACIÓN DIRECTA (Pon tus datos aquí para evitar errores de variables) ---
-const MI_SEMILLA = "TU FRASE SEMILLA DE 12 O 24 PALABRAS AQUÍ"; 
+const MI_SEMILLA = "brown weird curve old found clog super vendor pen keep size giant"; 
 const MI_DIRECCION = "TU_DIRECCION_SP_AQUI"; 
 // ----------------------------------------------------------------------------------
 
