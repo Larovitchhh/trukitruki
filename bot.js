@@ -4,59 +4,58 @@ import {
 import { StacksMainnet } from '@stacks/network';
 import fetch from 'node-fetch';
 
-// DATOS HARDCODEADOS - Si esto falla, el problema es de Railway no actualizando el archivo
-const SEMILLA = "brown weird curve old found clog super vendor pen keep size giant";
-const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
-const CONTRATO_NOMBRE = 'onchainkms-stacks';
-const CONTRATO_ADDRESS = 'SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH';
+// DATOS REALES DIRECTOS
+const MI_FRASE = "brown weird curve old found clog super vendor pen keep size giant";
+const MI_DIRECCION_STX = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
+const MI_CONTRATO = "onchainkms-stacks";
+const DIRECCION_DEL_CONTRATO = "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH";
 
-// Cambiamos a HIRO que no da el error EPROTO de SSL
-const network = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
+// Usamos el nodo de Hiro para saltar el error EPROTO (SSL 40)
+const redStacks = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
-async function iniciar() {
-  console.log("!!! BOT ARRANCANDO !!!");
-  console.log("Usando direccion:", DIRECCION);
-
+async function ejecutarBot() {
+  console.log("=== ARRANCANDO BOT FORZADO ===");
+  
   try {
-    const privKey = await mnemonicToStxPrivKey(SEMILLA);
+    const clavePrivada = await mnemonicToStxPrivKey(MI_FRASE);
     
-    // Peticion de Nonce
-    const response = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
-    const data = await response.json();
-    let nonce = data.nonce || 0;
+    // Si esta linea falla con "undefined", es que Railway NO esta usando este archivo
+    const peticion = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${MI_DIRECCION_STX}?proof=0`);
+    const cuenta = await peticion.json();
+    let miNonce = cuenta.nonce || 0;
     
-    console.log("Nonce obtenido:", nonce);
+    console.log("Nonce inicial:", miNonce);
 
     while (true) {
       try {
-        const txOptions = {
-          contractAddress: CONTRATO_ADDRESS,
-          contractName: CONTRATO_NOMBRE,
+        const opciones = {
+          contractAddress: DIRECCION_DEL_CONTRATO,
+          contractName: MI_CONTRATO,
           functionName: 'mint-activity',
           functionArgs: [stringAsciiCV("run"), uintCV(1), uintCV(1), uintCV(1), uintCV(1)],
-          senderKey: privKey,
-          nonce: nonce,
-          fee: 10000,
-          network: network,
+          senderKey: clavePrivada,
+          nonce: miNonce,
+          fee: 12000,
+          network: redStacks,
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
         };
 
-        const tx = await makeContractCall(txOptions);
-        const result = await broadcastTransaction(tx);
+        const tx = await makeContractCall(opciones);
+        const envio = await broadcastTransaction(tx);
         
-        console.log(`RESULTADO: Nonce ${nonce} ->`, result.txid || result.error || result);
+        console.log(`Nonce ${miNonce} -> Resultado:`, envio.txid || envio.error);
         
-        nonce++;
-        await new Promise(r => setTimeout(r, 20000));
+        miNonce++;
+        await new Promise(r => setTimeout(r, 25000));
       } catch (err) {
         console.error("Error en bucle:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (e) {
-    console.error("ERROR AL INICIAR:", e.message);
+    console.error("ERROR CRITICO:", e.message);
   }
 }
 
-iniciar();
+ejecutarBot();
