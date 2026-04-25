@@ -1,7 +1,12 @@
-import { makeRandomPrivKey, getAddressFromPrivateKey } from '@stacks/transactions';
+import { mnemonicToStxPrivKey } from '@stacks/transactions';
 
-const privateKey = makeRandomPrivKey();
-const address = getAddressFromPrivateKey(privateKey, 'mainnet');
+// PEGA AQUÍ TUS 12 PALABRAS
+const mnemonic = "tu semilla aqui de doce palabras"; 
 
-console.log("PRIVATE_KEY:", privateKey);
-console.log("ADDRESS:", address);
+async function ver() {
+  const pk = await mnemonicToStxPrivKey(mnemonic);
+  console.log("---------------------------------------");
+  console.log("TU CLAVE PRIVADA ES:", pk);
+  console.log("---------------------------------------");
+}
+ver();
