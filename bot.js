@@ -6,7 +6,7 @@ import fetch from 'node-fetch';
 
 // --- CONFIGURACIÓN DIRECTA (Pon tus datos aquí para evitar errores de variables) ---
 const MI_SEMILLA = "brown weird curve old found clog super vendor pen keep size giant"; 
-const MI_DIRECCION = "TU_DIRECCION_SP_AQUI"; 
+const MI_DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G"; 
 // ----------------------------------------------------------------------------------
 
 const CONTRACT_ADDRESS = 'SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH';
