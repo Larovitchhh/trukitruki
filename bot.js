@@ -8,16 +8,23 @@ const FRASE = "brown weird curve old found clog super vendor pen keep size giant
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== ARRANQUE POR FUERZA BRUTA (SIN MNEMONICTOSTX) ===");
+  console.log("=== ENVIANDO TRANSACCIONES ===");
   
   try {
-    // Derivamos la clave privada manualmente como lo hace Xverse/Leather
+    // Generación manual de clave (ya comprobado que funciona)
     const seed = mnemonicToSeedSync(FRASE);
     const hdkey = HDKey.fromMasterSeed(seed);
     const child = hdkey.derive("m/44'/5757'/0'/0/0");
     const clavePrivada = Buffer.from(child.privateKey).toString('hex');
     
-    console.log("✅ Clave privada generada manualmente.");
+    console.log("✅ Clave privada lista.");
+
+    // Definimos la red con el formato que exige la versión 6.x
+    const red = {
+      coreApiUrl: 'https://api.mainnet.hiro.so',
+      chainId: 1,
+      networkVersion: 1
+    };
 
     const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
     const data = await res.json();
@@ -39,8 +46,8 @@ async function ejecutar() {
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 100000, // 0.1 STX para que entre volando
-          network: { coreApiUrl: 'https://api.mainnet.hiro.so' },
+          fee: 120000, // Subido un poco más para prioridad
+          network: red,
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
         };
@@ -48,14 +55,22 @@ async function ejecutar() {
         const tx = await makeContractCall(txOptions);
         const result = await broadcastTransaction(tx);
         
-        console.log(`[Nonce ${nonce}] TXID: ${result.txid || 'Error'}`);
-        
-        if (result.txid || JSON.stringify(result).includes("Nonce")) {
-          nonce++;
+        if (result.txid) {
+            console.log(`[Nonce ${nonce}] ✅ ÉXITO! TXID: ${result.txid}`);
+            nonce++;
+        } else {
+            const errorMsg = JSON.stringify(result);
+            console.log(`[Nonce ${nonce}] ⚠️ Respuesta: ${errorMsg}`);
+            
+            if (errorMsg.includes("NonceAlreadyUsed")) {
+                nonce++;
+            }
         }
-        await new Promise(r => setTimeout(r, 20000));
+        
+        console.log("Esperando 30s...");
+        await new Promise(r => setTimeout(r, 30000));
       } catch (err) {
-        console.log("Reintentando... Error:", err.message);
+        console.log("⚠️ Error en bucle:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
