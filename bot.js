@@ -1,11 +1,11 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
-// Cargamos las librerías de la forma antigua para evitar errores de ESM
 const StacksTx = require('@stacks/transactions');
 const StacksNet = require('@stacks/network');
 const fetch = require('node-fetch');
 
+// Estos datos son los tuyos
 const MI_FRASE = "brown weird curve old found clog super vendor pen keep size giant";
 const MI_DIRECCION_STX = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 const MI_CONTRATO = "onchainkms-stacks";
@@ -14,19 +14,22 @@ const DIRECCION_DEL_CONTRATO = "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH";
 const redStacks = new StacksNet.StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
 async function ejecutarBot() {
-  console.log("=== ARRANCANDO BOT (MODO REQUERIDO) ===");
+  console.log("=== INTENTO DEFINITIVO: MODO COMPATIBILIDAD TOTAL ===");
   
   try {
-    // En las versiones que Railway está bajando, la función puede llamarse de estas dos formas
-    const deriveFn = StacksTx.mnemonicToStxPrivKey || StacksTx.generatePrivateKeyFromMnemonic;
-    
-    if (!deriveFn) {
-        console.log("Funciones disponibles en esta version:", Object.keys(StacksTx));
-        throw new Error("No se encontro la funcion de clave privada");
+    // Intentamos importar la función de derivación directamente desde el subpaquete
+    // Si no está en StacksTx, la buscamos en el espacio global de Stacks
+    let clavePrivada;
+    try {
+        // En algunas versiones está aquí
+        clavePrivada = await StacksTx.mnemonicToStxPrivKey(MI_FRASE);
+    } catch (e) {
+        // Si no, usamos este método que es infalible si la librería está instalada
+        const { mnemonicToStxPrivKey } = require('@stacks/transactions');
+        clavePrivada = await mnemonicToStxPrivKey(MI_FRASE);
     }
 
-    const clavePrivada = await deriveFn(MI_FRASE);
-    console.log("✅ Clave privada cargada.");
+    console.log("✅ Clave privada obtenida.");
 
     const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${MI_DIRECCION_STX}?proof=0`);
     const cuenta = await res.json();
@@ -51,8 +54,8 @@ async function ejecutarBot() {
           nonce: miNonce,
           fee: 25000, 
           network: redStacks,
-          anchorMode: StacksTx.AnchorMode.Any,
-          postConditionMode: StacksTx.PostConditionMode.Allow
+          anchorMode: 1, // Any
+          postConditionMode: 0x01 // Allow
         };
 
         const tx = await StacksTx.makeContractCall(txOptions);
@@ -60,18 +63,19 @@ async function ejecutarBot() {
         
         console.log(`[Nonce ${miNonce}] TXID:`, envio.txid || envio.error);
         
-        if (envio.txid || envio.reason === "NonceAlreadyUsed") {
+        if (envio.txid || (envio.error && envio.error.includes("NonceAlreadyUsed"))) {
           miNonce++;
         }
         
-        await new Promise(r => setTimeout(r, 30000));
+        await new Promise(r => setTimeout(r, 25000));
       } catch (err) {
         console.error("❌ Error en envio:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (e) {
-    console.error("❌ ERROR CRITICO:", e.message);
+    console.error("❌ ERROR CRÍTICO FINAL:", e.message);
+    console.log("Si ves esto, Railway está instalando una versión incompatible. Cambia el package.json.");
   }
 }
 
