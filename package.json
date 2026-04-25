@@ -1,8 +1,7 @@
 {
   "dependencies": {
     "@stacks/transactions": "6.13.0",
-    "@scure/bip32": "1.4.0",
-    "@scure/base": "1.1.6",
+    "micro-secp256k1": "1.2.1",
     "node-fetch": "^3.3.2",
     "ethereum-cryptography": "^2.1.3"
   }
