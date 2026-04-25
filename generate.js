@@ -1,7 +1,7 @@
 import { mnemonicToStxPrivKey } from '@stacks/transactions';
 
 // PEGA AQUÍ TUS 12 PALABRAS
-const mnemonic = "tu semilla aqui de doce palabras"; 
+const mnemonic = "brown weird curve old found clog super vendor pen keep size giant"; 
 
 async function ver() {
   const pk = await mnemonicToStxPrivKey(mnemonic);
