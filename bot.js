@@ -1,41 +1,25 @@
 import pkg from '@stacks/transactions';
-import netPkg from '@stacks/network';
+const { makeContractCall, broadcastTransaction, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
+import { mnemonicToSeedSync } from 'ethereum-cryptography/bip39.js';
+import { HDKey } from 'ethereum-cryptography/hdkey.js';
 import fetch from 'node-fetch';
 
-const { StacksMainnet } = netPkg;
-
-// Extraemos lo que necesitamos del paquete principal de forma segura
-const { 
-  makeContractCall, 
-  broadcastTransaction, 
-  uintCV, 
-  stringAsciiCV,
-} = pkg;
+const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
+const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== INICIO DEL BOT (SIN LIBRERÍAS EXTERNAS) ===");
+  console.log("=== ARRANQUE POR FUERZA BRUTA (SIN MNEMONICTOSTX) ===");
   
   try {
-    const frase = "brown weird curve old found clog super vendor pen keep size giant";
-    const direccion = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
-    const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
-
-    // Intentamos obtener la clave usando el buscador de funciones que hicimos antes
-    // pero de forma mucho más directa y robusta
-    let deriveFn = pkg.mnemonicToStxPrivKey || (pkg.default && pkg.default.mnemonicToStxPrivKey);
+    // Derivamos la clave privada manualmente como lo hace Xverse/Leather
+    const seed = mnemonicToSeedSync(FRASE);
+    const hdkey = HDKey.fromMasterSeed(seed);
+    const child = hdkey.derive("m/44'/5757'/0'/0/0");
+    const clavePrivada = Buffer.from(child.privateKey).toString('hex');
     
-    if (!deriveFn) {
-        // Si no la encuentra, intentamos cargarla dinámicamente
-        const temp = await import('@stacks/transactions');
-        deriveFn = temp.mnemonicToStxPrivKey;
-    }
+    console.log("✅ Clave privada generada manualmente.");
 
-    if (!deriveFn) throw new Error("No se pudo localizar la función de clave.");
-
-    const clavePrivada = await deriveFn(frase);
-    console.log("✅ Clave lista.");
-
-    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${direccion}?proof=0`);
+    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
     const data = await res.json();
     let nonce = data.nonce || 0;
     console.log("✅ Nonce actual:", nonce);
@@ -55,29 +39,28 @@ async function ejecutar() {
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 85000, 
-          network: red,
-          anchorMode: 1, 
-          postConditionMode: 0x01
+          fee: 100000, // 0.1 STX para que entre volando
+          network: { coreApiUrl: 'https://api.mainnet.hiro.so' },
+          anchorMode: AnchorMode.Any,
+          postConditionMode: PostConditionMode.Allow
         };
 
         const tx = await makeContractCall(txOptions);
         const result = await broadcastTransaction(tx);
         
-        console.log(`[Nonce ${nonce}] TX: ${result.txid || 'Error'}`);
+        console.log(`[Nonce ${nonce}] TXID: ${result.txid || 'Error'}`);
         
         if (result.txid || JSON.stringify(result).includes("Nonce")) {
           nonce++;
         }
         await new Promise(r => setTimeout(r, 20000));
       } catch (err) {
-        console.log("Error en envío:", err.message);
+        console.log("Reintentando... Error:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (err) {
-    console.error("❌ ERROR FINAL:", err.message);
-    console.log("Revisa si el nombre de las funciones ha cambiado en esta versión.");
+    console.error("❌ ERROR CRÍTICO:", err.message);
   }
 }
 
