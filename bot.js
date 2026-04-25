@@ -1,45 +1,27 @@
 import pkg from '@stacks/transactions';
-const { makeContractCall, broadcastTransaction, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
+const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode, serializePayload } = pkg;
 import { mnemonicToSeedSync } from 'ethereum-cryptography/bip39.js';
 import { HDKey } from 'ethereum-cryptography/hdkey.js';
 import fetch from 'node-fetch';
 
 const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
+const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== LOCALIZANDO CUENTA CON FONDOS ===");
+  console.log("=== ARRANQUE DE EMERGENCIA (POST DIRECTO) ===");
   
   try {
     const seed = mnemonicToSeedSync(FRASE);
     const hdkey = HDKey.fromMasterSeed(seed);
-    
-    // Probamos las 3 primeras rutas de derivación comunes
-    let claveFinal = "";
-    let direccionFinal = "";
-    
-    for (let i = 0; i < 3; i++) {
-        const child = hdkey.derive(`m/44'/5757'/0'/0/${i}`);
-        const priv = Buffer.from(child.privateKey).toString('hex');
-        
-        // Aquí deberíamos validar cuál es la SP35... pero para ir rápido:
-        // Si tu dirección manual es SP35TF6V4VC4EX07QF36J42EG6GBDA85RPR9MV9ZK, 
-        // necesitamos asegurarnos de que el bot la genera.
-        console.log(`Cuenta ${i} generada.`);
-        if (i === 0) { claveFinal = priv; direccionFinal = "LA_QUE_TENGA_FONDOS"; }
-    }
+    const child = hdkey.derive("m/44'/5757'/0'/0/0");
+    const clavePrivada = Buffer.from(child.privateKey).toString('hex');
 
-    // --- CAMBIO MANUAL CRÍTICO ---
-    // Si sabes que tu clave privada de la SP35... es una concreta, ponla aquí.
-    // Si no, usaremos la cuenta 0 que es la estándar.
-    const clavePrivada = claveFinal; 
-    const miDireccion = "SP35TF6V4VC4EX07QF36J42EG6GBDA85RPR9MV9ZK"; 
+    // Forzamos el Nonce desde la API de Hiro para no fallar
+    const resAccount = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+    const dataAccount = await resAccount.json();
+    let nonce = dataAccount.nonce;
 
-    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${miDireccion}?proof=0`);
-    const data = await res.json();
-    let nonce = data.nonce || 0;
-    
-    console.log(`✅ Identificada cuenta: ${miDireccion}`);
-    console.log(`✅ Nonce detectado: ${nonce}`);
+    console.log(`✅ Saldo verificado. Nonce inicial: ${nonce}`);
 
     while (true) {
       try {
@@ -50,27 +32,41 @@ async function ejecutar() {
           functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 5000, 
+          fee: 10000, // 0.01 STX
           network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
         };
 
         const tx = await makeContractCall(txOptions);
-        const result = await broadcastTransaction(tx);
         
-        if (result.txid) {
-            console.log(`[Nonce ${nonce}] 🚀 https://explorer.hiro.so/txid/0x${result.txid}?chain=mainnet`);
-            nonce++;
+        // Enviamos la TX de forma manual para ver la respuesta RAW del nodo
+        const response = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: tx.serialize()
+        });
+
+        const result = await response.text();
+
+        if (response.ok) {
+          console.log(`[Nonce ${nonce}] 🚀 EN MEMPOOL: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
+          nonce++;
+        } else {
+          console.log(`[Nonce ${nonce}] ❌ RECHAZADA: ${result}`);
+          // Si el error es de Nonce, sincronizamos
+          if (result.includes("NonceAlreadyUsed")) nonce++;
         }
-        await new Promise(r => setTimeout(r, 45000));
+
+        await new Promise(r => setTimeout(r, 30000));
       } catch (err) {
-        console.log("Error:", err.message);
+        console.log("⚠️ Error en envío:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (err) {
-    console.error("❌ ERROR:", err.message);
+    console.error("❌ ERROR CRÍTICO:", err.message);
   }
 }
+
 ejecutar();
