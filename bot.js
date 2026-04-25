@@ -8,7 +8,7 @@ const FRASE = "brown weird curve old found clog super vendor pen keep size giant
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== ESPERANDO GASOLINA (STX) ===");
+  console.log("=== FORZANDO NONCE 24 (POST-MANUAL) ===");
   
   try {
     const seed = mnemonicToSeedSync(FRASE);
@@ -16,20 +16,25 @@ async function ejecutar() {
     const child = hdkey.derive("m/44'/5757'/0'/0/0");
     const clavePrivada = Buffer.from(child.privateKey).toString('hex');
 
+    // Empezamos en 24 porque tu última TX manual fue la 23
+    let nonce = 24; 
+
     while (true) {
       try {
-        const resAccount = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
-        const dataAccount = await resAccount.json();
-        let nonce = dataAccount.nonce;
-
         const txOptions = {
           contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
           contractName: "onchainkms-stacks",
           functionName: 'mint-activity',
-          functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
+          functionArgs: [
+            stringAsciiCV("run"),
+            uintCV(11),
+            uintCV(67),
+            uintCV(102),
+            uintCV(103)
+          ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 3000, // 0.003 STX
+          fee: 5000, // 0.005 STX
           network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
@@ -43,16 +48,29 @@ async function ejecutar() {
         });
 
         const result = await response.text();
+
         if (response.ok) {
-          console.log(`[Nonce ${nonce}] ✅ ¡FUNCIONA! TXID: 0x${result.replace(/"/g, '')}`);
+          console.log(`[Nonce ${nonce}] ✅ LANZADA: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
           nonce++;
+          // Esperamos 40 segundos para que la mempool no se sature
+          await new Promise(r => setTimeout(r, 40000));
         } else {
-          console.log(`[Saldo insuficiente?] Error: ${result}`);
+          console.log(`[Nonce ${nonce}] ❌ ERROR: ${result}`);
+          // Si nos hemos pasado de listos con el nonce, lo sincronizamos
+          if (result.includes("NonceAlreadyUsed")) nonce++;
+          if (result.includes("NotEnoughFunds")) {
+             console.log("Nodo reporta falta de fondos. Reintentando en 10s...");
+             await new Promise(r => setTimeout(r, 10000));
+          }
         }
-      } catch (e) { console.log("Reintentando..."); }
-      
-      await new Promise(r => setTimeout(r, 60000));
+      } catch (e) { 
+        console.log("Error de conexión, reintentando...");
+        await new Promise(r => setTimeout(r, 10000));
+      }
     }
-  } catch (err) { console.log(err.message); }
+  } catch (err) {
+    console.error("❌ ERROR CRÍTICO:", err.message);
+  }
 }
+
 ejecutar();
