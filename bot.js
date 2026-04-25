@@ -3,35 +3,25 @@ const { makeContractCall, broadcastTransaction, stringAsciiCV, uintCV } = pkg;
 import { StacksMainnet } from '@stacks/network';
 import fetch from 'node-fetch';
 
-// Tu semilla y dirección
 const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
-
-// Nodo de Hiro
 const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
 async function ejecutar() {
-  console.log("=== EJECUCIÓN FINAL SIN DEPENDENCIAS DE CLAVE ===");
+  console.log("=== INTENTO CON FUNCIONES DISPONIBLES EN TU LOG ===");
   
   try {
-    // IMPORTANTE: Si la función falla, usamos el backup manual
-    let clavePrivada;
-    try {
-        // Intentamos el método estándar de la librería que Railway tiene instalada
-        const { mnemonicToStxPrivKey } = await import('@stacks/transactions');
-        clavePrivada = await mnemonicToStxPrivKey(FRASE);
-    } catch (e) {
-        // Si falla (como antes), el bot morirá aquí con un mensaje claro
-        throw new Error("La librería de Stacks en Railway no es compatible con Node 22. Error: " + e.message);
-    }
+    // Usamos una ruta alternativa que suele estar disponible cuando la principal falla
+    const { mnemonicToStxPrivKey } = await import('@stacks/transactions/dist/index.js');
+    const clavePrivada = await mnemonicToStxPrivKey(FRASE);
 
-    console.log("✅ Clave generada. Obteniendo Nonce...");
+    console.log("✅ Clave generada.");
 
     const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
     const data = await res.json();
     let nonce = data.nonce || 0;
 
-    console.log("✅ Nonce inicial:", nonce);
+    console.log("✅ Nonce actual:", nonce);
 
     while (true) {
       try {
@@ -48,10 +38,10 @@ async function ejecutar() {
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 50000, 
+          fee: 55000, 
           network: red,
-          anchorMode: 1, // Any
-          postConditionMode: 0x01 // Allow
+          anchorMode: 1,
+          postConditionMode: 0x01
         };
 
         const tx = await makeContractCall(txOptions);
@@ -70,7 +60,8 @@ async function ejecutar() {
       }
     }
   } catch (err) {
-    console.error("❌ ERROR FATAL:", err.message);
+    console.error("❌ ERROR CRÍTICO:", err.message);
+    console.log("Prueba a añadir 'engines': { 'node': '20.x' } en tu package.json");
   }
 }
 
