@@ -2,12 +2,15 @@
   "name": "stacks-bot",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@stacks/transactions": "6.13.0",
     "@stacks/network": "6.13.0",
     "node-fetch": "^3.3.2"
   },
   "scripts": {
-    "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 node --tls-cipher-list=DEFAULT@SECLEVEL=1 bot.js"
+    "start": "node bot.js"
   }
 }
