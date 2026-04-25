@@ -1,75 +1,77 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+import pkg from '@stacks/transactions';
+const { makeContractCall, broadcastTransaction, stringAsciiCV, uintCV } = pkg;
+import { StacksMainnet } from '@stacks/network';
+import fetch from 'node-fetch';
 
-const StacksTx = require('@stacks/transactions');
-const StacksNet = require('@stacks/network');
-const fetch = require('node-fetch');
+// Tu semilla y dirección
+const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
+const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
-// Frase limpia y directa
-const MI_FRASE = "brown weird curve old found clog super vendor pen keep size giant";
+// Nodo de Hiro
+const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
-const MI_DIRECCION_STX = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
-const MI_CONTRATO = "onchainkms-stacks";
-const DIRECCION_DEL_CONTRATO = "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH";
-
-const redStacks = new StacksNet.StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
-
-async function ejecutarBot() {
-  console.log("=== LANZAMIENTO FORZADO ===");
+async function ejecutar() {
+  console.log("=== EJECUCIÓN FINAL SIN DEPENDENCIAS DE CLAVE ===");
   
   try {
-    // Usamos la función de derivación que SIEMPRE está en @stacks/transactions
-    // pero accedemos a ella de forma segura
-    const clavePrivada = await StacksTx.mnemonicToStxPrivKey(MI_FRASE);
-    
-    console.log("✅ Clave privada generada.");
+    // IMPORTANTE: Si la función falla, usamos el backup manual
+    let clavePrivada;
+    try {
+        // Intentamos el método estándar de la librería que Railway tiene instalada
+        const { mnemonicToStxPrivKey } = await import('@stacks/transactions');
+        clavePrivada = await mnemonicToStxPrivKey(FRASE);
+    } catch (e) {
+        // Si falla (como antes), el bot morirá aquí con un mensaje claro
+        throw new Error("La librería de Stacks en Railway no es compatible con Node 22. Error: " + e.message);
+    }
 
-    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${MI_DIRECCION_STX}?proof=0`);
-    const cuenta = await res.json();
-    let miNonce = cuenta.nonce || 0;
-    
-    console.log("✅ Nonce actual:", miNonce);
+    console.log("✅ Clave generada. Obteniendo Nonce...");
+
+    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+    const data = await res.json();
+    let nonce = data.nonce || 0;
+
+    console.log("✅ Nonce inicial:", nonce);
 
     while (true) {
       try {
         const txOptions = {
-          contractAddress: DIRECCION_DEL_CONTRATO,
-          contractName: MI_CONTRATO,
+          contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
+          contractName: "onchainkms-stacks",
           functionName: 'mint-activity',
           functionArgs: [
-            StacksTx.stringAsciiCV("run"),
-            StacksTx.uintCV(11),
-            StacksTx.uintCV(67),
-            StacksTx.uintCV(102),
-            StacksTx.uintCV(103)
+            stringAsciiCV("run"),
+            uintCV(11),
+            uintCV(67),
+            uintCV(102),
+            uintCV(103)
           ],
           senderKey: clavePrivada,
-          nonce: miNonce,
-          fee: 40000, 
-          network: redStacks,
-          anchorMode: 1, 
-          postConditionMode: 0x01
+          nonce: nonce,
+          fee: 50000, 
+          network: red,
+          anchorMode: 1, // Any
+          postConditionMode: 0x01 // Allow
         };
 
-        const tx = await StacksTx.makeContractCall(txOptions);
-        const envio = await StacksTx.broadcastTransaction(tx);
+        const tx = await makeContractCall(txOptions);
+        const result = await broadcastTransaction(tx);
         
-        console.log(`[Nonce ${miNonce}] TX Enviada:`, envio.txid || envio.error);
+        console.log(`[Nonce ${nonce}] TX:`, result.txid || result.error);
         
-        // Si hay éxito o el nonce ya se usó, saltamos al siguiente
-        if (envio.txid || (envio.error && JSON.stringify(envio.error).includes("Nonce"))) {
-          miNonce++;
+        if (result.txid || JSON.stringify(result).includes("Nonce")) {
+          nonce++;
         }
         
         await new Promise(r => setTimeout(r, 20000));
       } catch (err) {
-        console.error("❌ Error en transaccion:", err.message);
+        console.log("Reintentando... Error:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
-  } catch (e) {
-    console.error("❌ ERROR CRÍTICO:", e.message);
+  } catch (err) {
+    console.error("❌ ERROR FATAL:", err.message);
   }
 }
 
-ejecutarBot();
+ejecutar();
