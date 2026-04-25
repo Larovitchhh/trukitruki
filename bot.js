@@ -1,33 +1,44 @@
 import pkg from '@stacks/transactions';
-import { StacksMainnet } from '@stacks/network';
-import * as bip39 from 'bip39';
-import { BIP32Factory } from 'bip32';
-import * as ecc from 'tiny-secp256k1';
+import netPkg from '@stacks/network';
 import fetch from 'node-fetch';
 
-const bip32 = BIP32Factory(ecc);
+const { StacksMainnet } = netPkg;
+
+// Extraemos lo que necesitamos del paquete principal de forma segura
+const { 
+  makeContractCall, 
+  broadcastTransaction, 
+  uintCV, 
+  stringAsciiCV,
+} = pkg;
 
 async function ejecutar() {
-  console.log("=== ARRANQUE MANUAL (BYPASS STACKS LIB) ===");
+  console.log("=== INICIO DEL BOT (SIN LIBRERÍAS EXTERNAS) ===");
   
   try {
     const frase = "brown weird curve old found clog super vendor pen keep size giant";
-    
-    // Generamos la clave privada manualmente (Ruta de Stacks: m/44'/5757'/0'/0/0)
-    const seed = await bip39.mnemonicToSeed(frase);
-    const root = bip32.fromSeed(seed);
-    const child = root.derivePath("m/44'/5757'/0'/0/0");
-    const clavePrivada = child.privateKey.toString('hex');
-    
-    console.log("✅ Clave privada generada manualmente.");
-
     const direccion = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
     const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
+
+    // Intentamos obtener la clave usando el buscador de funciones que hicimos antes
+    // pero de forma mucho más directa y robusta
+    let deriveFn = pkg.mnemonicToStxPrivKey || (pkg.default && pkg.default.mnemonicToStxPrivKey);
+    
+    if (!deriveFn) {
+        // Si no la encuentra, intentamos cargarla dinámicamente
+        const temp = await import('@stacks/transactions');
+        deriveFn = temp.mnemonicToStxPrivKey;
+    }
+
+    if (!deriveFn) throw new Error("No se pudo localizar la función de clave.");
+
+    const clavePrivada = await deriveFn(frase);
+    console.log("✅ Clave lista.");
 
     const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${direccion}?proof=0`);
     const data = await res.json();
     let nonce = data.nonce || 0;
-    console.log("✅ Nonce:", nonce);
+    console.log("✅ Nonce actual:", nonce);
 
     while (true) {
       try {
@@ -36,24 +47,24 @@ async function ejecutar() {
           contractName: "onchainkms-stacks",
           functionName: 'mint-activity',
           functionArgs: [
-            pkg.stringAsciiCV("run"),
-            pkg.uintCV(11),
-            pkg.uintCV(67),
-            pkg.uintCV(102),
-            pkg.uintCV(103)
+            stringAsciiCV("run"),
+            uintCV(11),
+            uintCV(67),
+            uintCV(102),
+            uintCV(103)
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 80000, 
+          fee: 85000, 
           network: red,
           anchorMode: 1, 
           postConditionMode: 0x01
         };
 
-        const tx = await pkg.makeContractCall(txOptions);
-        const result = await pkg.broadcastTransaction(tx);
+        const tx = await makeContractCall(txOptions);
+        const result = await broadcastTransaction(tx);
         
-        console.log(`[Nonce ${nonce}] TXID: ${result.txid || 'Error'}`);
+        console.log(`[Nonce ${nonce}] TX: ${result.txid || 'Error'}`);
         
         if (result.txid || JSON.stringify(result).includes("Nonce")) {
           nonce++;
@@ -65,7 +76,8 @@ async function ejecutar() {
       }
     }
   } catch (err) {
-    console.error("❌ ERROR CRÍTICO:", err.message);
+    console.error("❌ ERROR FINAL:", err.message);
+    console.log("Revisa si el nombre de las funciones ha cambiado en esta versión.");
   }
 }
 
