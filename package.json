@@ -1,7 +1,13 @@
 {
+  "name": "stacks-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
   "dependencies": {
     "@stacks/transactions": "6.13.0",
-    "micro-secp256k1": "1.2.1",
     "node-fetch": "^3.3.2",
     "ethereum-cryptography": "^2.1.3"
   }
