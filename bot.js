@@ -1,14 +1,4 @@
 import pkg from '@stacks/transactions';
-const { 
-  makeContractCall, 
-  broadcastTransaction, 
-  AnchorMode, 
-  PostConditionMode, 
-  uintCV, 
-  stringAsciiCV, 
-  mnemonicToStxPrivKey 
-} = pkg;
-
 import { StacksMainnet } from '@stacks/network';
 import fetch from 'node-fetch';
 
@@ -21,19 +11,25 @@ const DIRECCION_DEL_CONTRATO = "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH";
 const redStacks = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
 async function ejecutarBot() {
-  console.log("=== ARRANCANDO BOT (MODO COMPATIBLE) ===");
+  console.log("=== ARRANCANDO BOT CON PARÁMETROS REALES ===");
   
   try {
-    // Generamos la clave
-    const clavePrivada = await mnemonicToStxPrivKey(MI_FRASE);
-    console.log("Clave privada generada.");
+    // Buscamos la función de derivación (v6 utiliza mnemonicToStxPrivKey)
+    const deriveFn = pkg.mnemonicToStxPrivKey || pkg.generatePrivateKeyFromMnemonic;
+    
+    if (!deriveFn) {
+      throw new Error("No se encontró la función de derivación en @stacks/transactions");
+    }
 
-    // Obtenemos el Nonce
+    const clavePrivada = await deriveFn(MI_FRASE);
+    console.log("Clave privada lista.");
+
+    // Obtenemos el Nonce inicial
     const peticion = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${MI_DIRECCION_STX}?proof=0`);
     const cuenta = await peticion.json();
     let miNonce = cuenta.nonce || 0;
     
-    console.log("Nonce inicial:", miNonce);
+    console.log("Nonce inicial detectado:", miNonce);
 
     while (true) {
       try {
@@ -41,26 +37,38 @@ async function ejecutarBot() {
           contractAddress: DIRECCION_DEL_CONTRATO,
           contractName: MI_CONTRATO,
           functionName: 'mint-activity',
-          functionArgs: [stringAsciiCV("run"), uintCV(1), uintCV(1), uintCV(1), uintCV(1)],
+          functionArgs: [
+            pkg.stringAsciiCV("run"),   // activityType
+            pkg.uintCV(11),             // distance
+            pkg.uintCV(67),             // duration
+            pkg.uintCV(102),            // elevation
+            pkg.uintCV(103)             // xp
+          ],
           senderKey: clavePrivada,
           nonce: miNonce,
-          fee: 15000, // Un poco más de gas para que no se quede atascada
+          fee: 15000, 
           network: redStacks,
-          anchorMode: AnchorMode.Any,
-          postConditionMode: PostConditionMode.Allow
+          anchorMode: pkg.AnchorMode.Any,
+          postConditionMode: pkg.PostConditionMode.Allow
         };
 
-        const tx = await makeContractCall(opciones);
-        const envio = await broadcastTransaction(tx);
+        const tx = await pkg.makeContractCall(opciones);
+        const envio = await pkg.broadcastTransaction(tx);
         
-        console.log(`Nonce ${miNonce} -> TXID:`, envio.txid || envio.error);
+        console.log(`Nonce ${miNonce} -> TXID:`, envio.txid || envio.error || envio);
         
-        miNonce++;
-        // Esperamos 30 segundos (Stacks es lento, no satures el mempool)
+        // Solo sumamos el nonce si no hubo un error de red
+        if (!envio.error) {
+          miNonce++;
+        } else if (envio.reason === "NonceAlreadyUsed") {
+          miNonce++; // Corregimos si se desincroniza
+        }
+        
+        // Espera de 30 segundos entre minteos
         await new Promise(r => setTimeout(r, 30000));
       } catch (err) {
-        console.error("Error en bucle:", err.message);
-        await new Promise(r => setTimeout(r, 10000));
+        console.error("Error enviando transacción:", err.message);
+        await new Promise(r => setTimeout(r, 15000));
       }
     }
   } catch (e) {
