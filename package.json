@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "@stacks/transactions": "^6.11.0",
-    "node-fetch": "^3.3.2"
+    "@stacks/transactions": "^6.11.0"
   },
   "scripts": {
-    "start": "node bot.js"
+    "start": "node generate.js"
   }
 }
