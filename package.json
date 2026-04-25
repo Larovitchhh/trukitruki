@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "@stacks/transactions": "^6.11.0"
+    "@stacks/transactions": "^6.11.0",
+    "@stacks/network": "^6.11.0",
+    "node-fetch": "^3.3.2"
   },
   "scripts": {
-    "start": "node generate.js"
+    "start": "node --tls-cipher-list=DEFAULT@SECLEVEL=1 bot.js"
   }
 }
