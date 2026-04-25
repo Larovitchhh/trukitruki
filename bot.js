@@ -1,4 +1,8 @@
-import { 
+import pkg from '@stacks/transactions';
+import netPkg from '@stacks/network';
+import fetch from 'node-fetch';
+
+const { 
   mnemonicToStxPrivKey, 
   makeContractCall, 
   broadcastTransaction, 
@@ -6,20 +10,25 @@ import {
   stringAsciiCV,
   AnchorMode,
   PostConditionMode
-} from '@stacks/transactions';
-import { StacksMainnet } from '@stacks/network';
-import fetch from 'node-fetch';
+} = pkg;
+
+const { StacksMainnet } = netPkg;
 
 const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 const red = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
 async function ejecutar() {
-  console.log("=== ARRANCANDO BOT (NODE 20 STABLE) ===");
+  console.log("=== ARRANCANDO BOT (REESCRITURA TOTAL) ===");
   
   try {
+    // Validamos la función antes de seguir
+    if (typeof mnemonicToStxPrivKey !== 'function') {
+        throw new Error("La función mnemonicToStxPrivKey no está disponible en este paquete.");
+    }
+
     const clavePrivada = await mnemonicToStxPrivKey(FRASE);
-    console.log("✅ Clave generada correctamente.");
+    console.log("✅ Clave generada.");
 
     const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
     const data = await res.json();
@@ -41,7 +50,7 @@ async function ejecutar() {
           ],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 60000, 
+          fee: 65000, 
           network: red,
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
@@ -56,9 +65,9 @@ async function ejecutar() {
           nonce++;
         }
         
-        await new Promise(r => setTimeout(r, 25000));
+        await new Promise(r => setTimeout(r, 20000));
       } catch (err) {
-        console.log("Reintentando... Error:", err.message);
+        console.log("Error en bucle:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
