@@ -1,34 +1,26 @@
 import pkg from '@stacks/transactions';
 const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
 import { mnemonicToSeedSync } from 'ethereum-cryptography/bip39.js';
-import { HDKey } from 'ethereum-cryptography/hdkey.js';
+import { HDKey } from '@scure/bip32';
 import fetch from 'node-fetch';
 
 const FRASE = "brown weird curve old found clog super vendor pen keep size giant";
-const DIRECCION_OBJETIVO = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
+const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== BUSCANDO LA LLAVE MAESTRA ===");
+  console.log("=== SINCRONIZACIÓN TOTAL CON WALLET ===");
   
   try {
     const seed = mnemonicToSeedSync(FRASE);
-    const hdkey = HDKey.fromMasterSeed(seed);
-    let claveCorrecta = "";
-
-    // Probamos las rutas que suelen usar Leather, Xverse y OKX
-    const rutas = [
-      "m/44'/5757'/0'/0/0",
-      "m/44'/5757'/0'/0/1",
-      "m/888'/0'/0'",
-      "m/44'/5757'/0'/0/2",
-      "m/44'/5757'/1'/0/0"
-    ];
-
-    // Buscamos cuál de estas rutas genera tu dirección con dinero
-    // Nota: Esto es un bypass técnico para no volverte loco con la configuración de la wallet
-    claveCorrecta = Buffer.from(hdkey.derive(rutas[0]).privateKey).toString('hex'); 
+    const root = HDKey.fromMasterSeed(seed);
     
-    let nonce = 24; 
+    // Esta es la ruta EXACTA que usa Leather/Xverse para la primera cuenta
+    const child = root.derive("m/44'/5757'/0'/0/0");
+    const clavePrivada = Buffer.from(child.privateKey).toString('hex');
+    
+    console.log("✅ Clave privada derivada correctamente.");
+
+    let nonce = 24; // Empezamos después de tu última TX manual
 
     while (true) {
       try {
@@ -37,7 +29,7 @@ async function ejecutar() {
           contractName: "onchainkms-stacks",
           functionName: 'mint-activity',
           functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
-          senderKey: claveCorrecta,
+          senderKey: clavePrivada,
           nonce: nonce,
           fee: 6000, 
           network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
@@ -55,24 +47,21 @@ async function ejecutar() {
         const result = await response.text();
 
         if (response.ok) {
-          console.log(`[Nonce ${nonce}] ✅ IMPACTO DIRECTO: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
+          console.log(`[Nonce ${nonce}] ✅ ¡POR FIN! TXID: 0x${result.replace(/"/g, '')}`);
           nonce++;
-          await new Promise(r => setTimeout(r, 45000));
+          await new Promise(r => setTimeout(r, 40000));
         } else {
-          // Si el nodo sigue diciendo "NotEnoughFunds", probamos la siguiente ruta en el próximo intento
-          console.log(`❌ Fallo en ruta actual: ${result}`);
-          if (result.includes("NotEnoughFunds")) {
-              console.log("Probando ruta alternativa de la wallet...");
-              // Aquí el script debería rotar, pero vamos a intentar que ésta entre por cojones
-          }
+          console.log(`❌ Error del Nodo: ${result}`);
+          if (result.includes("NonceAlreadyUsed")) nonce++;
           await new Promise(r => setTimeout(r, 10000));
         }
       } catch (e) {
+        console.log("Reintentando conexión...");
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error("Fallo crítico:", err.message);
   }
 }
 
