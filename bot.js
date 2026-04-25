@@ -1,82 +1,59 @@
 import {
-  makeContractCall,
-  broadcastTransaction,
-  AnchorMode,
-  PostConditionMode,
-  uintCV,
-  stringAsciiCV
+  makeContractCall, broadcastTransaction, AnchorMode, PostConditionMode, uintCV, stringAsciiCV, mnemonicToStxPrivKey
 } from '@stacks/transactions';
 import { StacksMainnet } from '@stacks/network';
 import fetch from 'node-fetch';
 
+// --- CONFIGURACIÓN DIRECTA (Pon tus datos aquí para evitar errores de variables) ---
+const MI_SEMILLA = "TU FRASE SEMILLA DE 12 O 24 PALABRAS AQUÍ"; 
+const MI_DIRECCION = "TU_DIRECCION_SP_AQUI"; 
+// ----------------------------------------------------------------------------------
+
 const CONTRACT_ADDRESS = 'SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH';
 const CONTRACT_NAME = 'onchainkms-stacks';
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const SENDER = process.env.SENDER;
-// Usamos el nodo de Hiro que suele ser más estable
-const API = 'https://api.mainnet.hiro.so'; 
-const network = new StacksMainnet({ url: API });
-
-async function getNonce(address) {
-  if (!address) throw new Error("Falta la variable SENDER en Railway");
-  try {
-    const res = await fetch(`${API}/v2/accounts/${address}?proof=0`);
-    const data = await res.json();
-    return data.nonce;
-  } catch (e) {
-    console.error("Error obteniendo nonce:", e.message);
-    return null;
-  }
-}
+const network = new StacksMainnet({ url: 'https://api.mainnet.hiro.so' });
 
 async function run() {
-  console.log("Iniciando bot para:", SENDER);
-  let nonce = await getNonce(SENDER);
-  
-  if (nonce === null) {
-    console.log("No se pudo obtener el nonce inicial. Reintentando en 10s...");
-    setTimeout(run, 10000);
-    return;
-  }
+  try {
+    // 1. Derivamos la clave privada de la semilla directamente para no depender de Railway
+    const privKey = await mnemonicToStxPrivKey(MI_SEMILLA);
+    console.log("Clave privada cargada correctamente.");
 
-  while (true) {
-    try {
-      const txOptions = {
-        contractAddress: CONTRACT_ADDRESS,
-        contractName: CONTRACT_NAME,
-        functionName: 'mint-activity',
-        functionArgs: [
-          stringAsciiCV("run"),
-          uintCV(1),
-          uintCV(1),
-          uintCV(1),
-          uintCV(1)
-        ],
-        senderKey: PRIVATE_KEY,
-        nonce: nonce,
-        fee: 5000, // Subido un poco para asegurar confirmación
-        network: network,
-        anchorMode: AnchorMode.Any,
-        postConditionMode: PostConditionMode.Allow
-      };
+    // 2. Obtenemos el Nonce (usando el nodo de Hiro que es más estable)
+    const res = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${MI_DIRECCION}?proof=0`);
+    const accountData = await res.json();
+    let nonce = accountData.nonce;
+    console.log("Nonce actual:", nonce);
 
-      const tx = await makeContractCall(txOptions);
-      const result = await broadcastTransaction(tx);
+    while (true) {
+      try {
+        const txOptions = {
+          contractAddress: CONTRACT_ADDRESS,
+          contractName: CONTRACT_NAME,
+          functionName: 'mint-activity',
+          functionArgs: [stringAsciiCV("run"), uintCV(1), uintCV(1), uintCV(1), uintCV(1)],
+          senderKey: privKey,
+          nonce: nonce,
+          fee: 5000,
+          network: network,
+          anchorMode: AnchorMode.Any,
+          postConditionMode: PostConditionMode.Allow
+        };
 
-      if (result.error) {
-        console.error(`Error en TX ${nonce}:`, result.error);
-        if (result.reason === 'NonceAlreadyUsed') nonce++;
-      } else {
-        console.log(`TX enviada con Nonce ${nonce}. ID: ${result.txid}`);
+        const tx = await makeContractCall(txOptions);
+        const result = await broadcastTransaction(tx);
+        
+        console.log(`TX enviada | Nonce: ${nonce} | Resultado:`, result.txid || result.error);
+        
         nonce++;
+        await new Promise(r => setTimeout(r, 15000)); // Espera 15 seg
+      } catch (innerError) {
+        console.error("Error en envío:", innerError.message);
+        await new Promise(r => setTimeout(r, 30000));
       }
-
-      await new Promise(r => setTimeout(r, 5000)); // 5 seg entre envíos
-
-    } catch (e) {
-      console.error("Fallo catastrófico:", e.message);
-      await new Promise(r => setTimeout(r, 10000));
     }
+  } catch (e) {
+    console.error("Fallo al iniciar:", e.message);
   }
 }
 
