@@ -8,7 +8,7 @@ const FRASE = "brown weird curve old found clog super vendor pen keep size giant
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== PROBANDO NODO ALTERNATIVO ===");
+  console.log("=== ESPERANDO GASOLINA (STX) ===");
   
   try {
     const seed = mnemonicToSeedSync(FRASE);
@@ -16,17 +16,12 @@ async function ejecutar() {
     const child = hdkey.derive("m/44'/5757'/0'/0/0");
     const clavePrivada = Buffer.from(child.privateKey).toString('hex');
 
-    // Usamos el nodo de Console que a veces es más permisivo que Hiro
-    const API_URL = 'https://stacks-node-api.mainnet.stacks.co';
-
-    const resAccount = await fetch(`${API_URL}/v2/accounts/${DIRECCION}?proof=0`);
-    const dataAccount = await resAccount.json();
-    let nonce = dataAccount.nonce;
-
-    console.log(`✅ Cuenta: ${DIRECCION} | Nonce: ${nonce}`);
-
     while (true) {
       try {
+        const resAccount = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+        const dataAccount = await resAccount.json();
+        let nonce = dataAccount.nonce;
+
         const txOptions = {
           contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
           contractName: "onchainkms-stacks",
@@ -34,39 +29,30 @@ async function ejecutar() {
           functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 2500, // Bajamos a 0.0025 STX para ver si el saldo 'Locked' nos deja
-          network: { version: 0x00, chainId: 1, coreApiUrl: API_URL },
+          fee: 3000, // 0.003 STX
+          network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
         };
 
         const tx = await makeContractCall(txOptions);
-        
-        const response = await fetch(`${API_URL}/v2/transactions`, {
+        const response = await fetch(`https://api.mainnet.hiro.so/v2/transactions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: tx.serialize()
         });
 
         const result = await response.text();
-
         if (response.ok) {
-          console.log(`[Nonce ${nonce}] 🚀 ENVIADA: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
+          console.log(`[Nonce ${nonce}] ✅ ¡FUNCIONA! TXID: 0x${result.replace(/"/g, '')}`);
           nonce++;
         } else {
-          console.log(`[Nonce ${nonce}] ❌ RECHAZADA: ${result}`);
-          if (result.includes("NonceAlreadyUsed")) nonce++;
+          console.log(`[Saldo insuficiente?] Error: ${result}`);
         }
-
-        await new Promise(r => setTimeout(r, 60000));
-      } catch (err) {
-        console.log("⚠️ Error:", err.message);
-        await new Promise(r => setTimeout(r, 10000));
-      }
+      } catch (e) { console.log("Reintentando..."); }
+      
+      await new Promise(r => setTimeout(r, 60000));
     }
-  } catch (err) {
-    console.error("❌ ERROR:", err.message);
-  }
+  } catch (err) { console.log(err.message); }
 }
-
 ejecutar();
