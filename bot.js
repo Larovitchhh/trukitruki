@@ -1,5 +1,5 @@
 import pkg from '@stacks/transactions';
-const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode, serializePayload } = pkg;
+const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
 import { mnemonicToSeedSync } from 'ethereum-cryptography/bip39.js';
 import { HDKey } from 'ethereum-cryptography/hdkey.js';
 import fetch from 'node-fetch';
@@ -8,7 +8,7 @@ const FRASE = "brown weird curve old found clog super vendor pen keep size giant
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== ARRANQUE DE EMERGENCIA (POST DIRECTO) ===");
+  console.log("=== PROBANDO NODO ALTERNATIVO ===");
   
   try {
     const seed = mnemonicToSeedSync(FRASE);
@@ -16,12 +16,14 @@ async function ejecutar() {
     const child = hdkey.derive("m/44'/5757'/0'/0/0");
     const clavePrivada = Buffer.from(child.privateKey).toString('hex');
 
-    // Forzamos el Nonce desde la API de Hiro para no fallar
-    const resAccount = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+    // Usamos el nodo de Console que a veces es más permisivo que Hiro
+    const API_URL = 'https://stacks-node-api.mainnet.stacks.co';
+
+    const resAccount = await fetch(`${API_URL}/v2/accounts/${DIRECCION}?proof=0`);
     const dataAccount = await resAccount.json();
     let nonce = dataAccount.nonce;
 
-    console.log(`✅ Saldo verificado. Nonce inicial: ${nonce}`);
+    console.log(`✅ Cuenta: ${DIRECCION} | Nonce: ${nonce}`);
 
     while (true) {
       try {
@@ -32,16 +34,15 @@ async function ejecutar() {
           functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
           senderKey: clavePrivada,
           nonce: nonce,
-          fee: 10000, // 0.01 STX
-          network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
+          fee: 2500, // Bajamos a 0.0025 STX para ver si el saldo 'Locked' nos deja
+          network: { version: 0x00, chainId: 1, coreApiUrl: API_URL },
           anchorMode: AnchorMode.Any,
           postConditionMode: PostConditionMode.Allow
         };
 
         const tx = await makeContractCall(txOptions);
         
-        // Enviamos la TX de forma manual para ver la respuesta RAW del nodo
-        const response = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
+        const response = await fetch(`${API_URL}/v2/transactions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: tx.serialize()
@@ -50,22 +51,21 @@ async function ejecutar() {
         const result = await response.text();
 
         if (response.ok) {
-          console.log(`[Nonce ${nonce}] 🚀 EN MEMPOOL: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
+          console.log(`[Nonce ${nonce}] 🚀 ENVIADA: https://explorer.hiro.so/txid/0x${result.replace(/"/g, '')}?chain=mainnet`);
           nonce++;
         } else {
           console.log(`[Nonce ${nonce}] ❌ RECHAZADA: ${result}`);
-          // Si el error es de Nonce, sincronizamos
           if (result.includes("NonceAlreadyUsed")) nonce++;
         }
 
-        await new Promise(r => setTimeout(r, 30000));
+        await new Promise(r => setTimeout(r, 60000));
       } catch (err) {
-        console.log("⚠️ Error en envío:", err.message);
+        console.log("⚠️ Error:", err.message);
         await new Promise(r => setTimeout(r, 10000));
       }
     }
   } catch (err) {
-    console.error("❌ ERROR CRÍTICO:", err.message);
+    console.error("❌ ERROR:", err.message);
   }
 }
 
