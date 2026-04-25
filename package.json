@@ -1,0 +1,12 @@
+{
+  "name": "stacks-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@stacks/transactions": "^6.11.0",
+    "node-fetch": "^3.3.2"
+  },
+  "scripts": {
+    "start": "node bot.js"
+  }
+}
