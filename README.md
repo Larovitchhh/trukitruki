@@ -1,2 +1,0 @@
-# trukitruki
-trukitruki
