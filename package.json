@@ -8,6 +8,6 @@
     "node-fetch": "^3.3.2"
   },
   "scripts": {
-    "start": "node --tls-cipher-list=DEFAULT@SECLEVEL=1 bot.js"
+    "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 node --tls-cipher-list=DEFAULT@SECLEVEL=1 bot.js"
   }
 }
