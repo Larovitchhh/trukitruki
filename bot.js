@@ -1,21 +1,21 @@
 import pkg from '@stacks/transactions';
-const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
-import fetch from 'node-fetch';
+const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode, broadcastTransaction } = pkg;
+import { StacksMainnet } from '@stacks/network';
 
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
-const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
+const network = new StacksMainnet();
 
 async function ejecutar() {
-  console.log("=== BOT AUTOMÁTICO REGENERATIVO ===");
+  console.log("=== ARRANCANDO BOT MODO NATIVO ===");
   
+  // Obtenemos el nonce una sola vez para empezar limpio
+  const res = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G/nonces`);
+  const data = await res.json();
+  let currentNonce = data.possible_next_nonce;
+
   while (true) {
     try {
-      // 1. Preguntamos el Nonce real (incluyendo las que están en la sala de espera/mempool)
-      const res = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${DIRECCION}/nonces`);
-      const data = await res.json();
-      let nonce = data.possible_next_nonce;
-
-      console.log(`📡 Trabajando con Nonce: ${nonce}`);
+      console.log(`🚀 Lanzando Nonce: ${currentNonce}`);
 
       const txOptions = {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
@@ -23,29 +23,33 @@ async function ejecutar() {
         functionName: 'mint-activity',
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
-        nonce: nonce,
-        fee: 20000, // 0.02 STX - Prioridad
-        network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
+        validateWithAbi: true, // Esto obliga al bot a verificar que la función existe antes de mandar basura
+        network,
+        nonce: currentNonce,
+        fee: 4000, // Tu fee estándar, sin locuras
         anchorMode: AnchorMode.Any,
-        postConditionMode: PostConditionMode.Allow
+        postConditionMode: PostConditionMode.Allow,
       };
 
-      const tx = await makeContractCall(txOptions);
-      const response = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: tx.serialize()
-      });
+      const transaction = await makeContractCall(txOptions);
+      const response = await broadcastTransaction(transaction, network);
 
-      const result = await response.text();
-      console.log(`[Nonce ${nonce}] Resultado: ${result}`);
-
-      // Esperamos 2 minutos para que la red procese y no saturemos el Nonce
-      console.log("⏳ Esperando 2 min para el siguiente ciclo...");
-      await new Promise(r => setTimeout(r, 120000));
+      // Si la respuesta tiene un error, lo tratamos aquí
+      if (response.error) {
+        console.log(`❌ Error: ${response.reason || response.error}`);
+        if (response.reason === 'NonceAlreadyUsed') {
+          currentNonce++;
+        }
+        await new Promise(r => setTimeout(r, 10000));
+      } else {
+        console.log(`✅ TXID: 0x${response.txid}`);
+        currentNonce++;
+        // Esperamos 45 segundos, lo normal
+        await new Promise(r => setTimeout(r, 45000));
+      }
 
     } catch (err) {
-      console.log("⚠️ Error de red o reinicio, reintentando en 10s...");
+      console.log("⚠️ Fallo en el bucle, reintentando...");
       await new Promise(r => setTimeout(r, 10000));
     }
   }
