@@ -5,61 +5,65 @@ import fetch from 'node-fetch';
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
 const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
-// Lista de nodos para asegurar que la TX se mueva
-const NODOS = [
-  "https://api.mainnet.hiro.so",
-  "https://stacks-node-api.mainnet.stacks.co"
-];
-
-async function enviarANodos(txRaw, nonce) {
-  for (const url of NODOS) {
-    try {
-      const res = await fetch(`${url}/v2/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: txRaw
-      });
-      const result = await res.text();
-      console.log(`[Nodo: ${url}] Respuesta: ${result}`);
-    } catch (e) {
-      console.log(`[Nodo: ${url}] Error de conexión.`);
-    }
-  }
-}
-
 async function ejecutar() {
-  console.log("=== ATAQUE MULTI-NODO (FUERZA BRUTA) ===");
+  console.log("=== SISTEMA ANTIBLOQUEO (EVITANDO TOO-MUCH-CHAINING) ===");
   
-  // Forzamos el Nonce 24 que es el que te toca
-  let nonce = 24; 
-
   while (true) {
     try {
+      // 1. Miramos el Nonce que ya está confirmado en la red
+      const resAcc = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+      const accData = await resAcc.json();
+      const lastConfirmedNonce = accData.nonce;
+
+      // 2. Miramos cuántas hay en la MEMPOOL (pendientes)
+      const resMempool = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${DIRECCION}/mempool`);
+      const mempoolData = await resMempool.json();
+      const totalPending = mempoolData.total;
+
+      console.log(`📊 Confirmadas: ${lastConfirmedNonce} | En espera: ${totalPending}`);
+
+      // Si tenemos más de 20 en espera, NO MANDAMOS MÁS.
+      if (totalPending >= 20) {
+        console.log("⏳ Cola llena. Esperando 5 minutos a que se limpien...");
+        await new Promise(r => setTimeout(r, 300000));
+        continue;
+      }
+
+      // El nonce para la nueva TX es el confirmado + las que están en espera
+      let siguienteNonce = lastConfirmedNonce + totalPending;
+
       const txOptions = {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
         contractName: "onchainkms-stacks",
         functionName: 'mint-activity',
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
-        nonce: nonce,
-        fee: 12000, // 0.012 STX (Prioridad alta para que aparezca sí o sí)
+        nonce: siguienteNonce,
+        fee: 15000, // Subimos a 0.015 STX para que los mineros las quieran YA
         network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
         anchorMode: AnchorMode.Any,
         postConditionMode: PostConditionMode.Allow
       };
 
       const tx = await makeContractCall(txOptions);
-      const txRaw = tx.serialize();
+      const res = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: tx.serialize()
+      });
 
-      console.log(`[Nonce ${nonce}] Propagando a todos los nodos...`);
-      await enviarANodos(txRaw, nonce);
+      const result = await res.text();
+      if (res.ok) {
+        console.log(`[Nonce ${siguienteNonce}] ✅ Enviada con éxito.`);
+      } else {
+        console.log(`❌ Error: ${result}`);
+      }
 
-      nonce++;
-      // Esperamos 2 minutos para no saturar tu propio nonce
-      await new Promise(r => setTimeout(r, 120000));
-      
+      // Esperamos 1 minuto entre envíos para no saturar
+      await new Promise(r => setTimeout(r, 60000));
+
     } catch (err) {
-      console.log("Error general:", err.message);
+      console.log("Reintentando...");
       await new Promise(r => setTimeout(r, 10000));
     }
   }
