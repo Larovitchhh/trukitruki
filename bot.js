@@ -1,62 +1,61 @@
 import pkg from '@stacks/transactions';
-const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode, broadcastTransaction } = pkg;
+const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
+import fetch from 'node-fetch';
 
-// USAMOS EL NODO OFICIAL DE LA FUNDACIÓN, NO EL DE HIRO
-const API_URL = "https://stacks-node-api.mainnet.stacks.co";
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
 
-async function ejecutar() {
-  console.log("=== USANDO NODO OFICIAL DE LA FUNDACIÓN (ANTI-LAG) ===");
+async function mintear() {
+  console.log("=== EJECUCIÓN DIRECTA: MODO MACHETE ===");
   
+  // Ponemos el 28 porque es el que el nodo te rechazó por "cola llena"
+  let nonce = 28; 
+
   while (true) {
     try {
-      // Consultamos el nonce real en el nodo de la fundación
-      const res = await fetch(`${API_URL}/v2/accounts/SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G?proof=0`);
-      const data = await res.json();
-      let currentNonce = data.nonce;
-
-      console.log(`📡 Nonce real detectado: ${currentNonce}`);
-
       const txOptions = {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
         contractName: "onchainkms-stacks",
         functionName: 'mint-activity',
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
-        nonce: currentNonce,
-        fee: 5000, 
-        network: { version: 0x00, chainId: 1, coreApiUrl: API_URL },
+        nonce: nonce,
+        fee: 10000, // 0.01 STX
+        network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
         anchorMode: AnchorMode.Any,
-        postConditionMode: PostConditionMode.Allow,
+        postConditionMode: PostConditionMode.Allow
       };
 
-      const transaction = await makeContractCall(txOptions);
+      const tx = await makeContractCall(txOptions);
       
-      const response = await fetch(`${API_URL}/v2/transactions`, {
+      const res = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: transaction.serialize()
+        body: tx.serialize()
       });
 
-      const result = await response.json();
-
-      if (result.error) {
-        console.log(`❌ Nodo: ${result.reason || result.error}`);
-        // Si la red está saturada de tus propias TXs, esperamos
-        if (result.reason === 'TooMuchChaining') {
-            console.log("⏳ La red tiene 25 TXs tuyas en cola. Esperando 5 min...");
-            await new Promise(r => setTimeout(r, 300000));
-        }
-      } else {
-        console.log(`✅ TX ENVIADA: 0x${result}`);
+      const texto = await res.text();
+      
+      if (res.ok) {
+        console.log(`[Nonce ${nonce}] ✅ OK: ${texto}`);
+        nonce++;
         await new Promise(r => setTimeout(r, 60000));
+      } else {
+        console.log(`[Nonce ${nonce}] ❌ ERROR: ${texto}`);
+        
+        if (texto.includes("TooMuchChaining")) {
+          console.log("Mempool llena. Reintentando el mismo nonce en 1 minuto...");
+          await new Promise(r => setTimeout(r, 60000));
+        } else if (texto.includes("NonceAlreadyUsed")) {
+          nonce++;
+        } else {
+          await new Promise(r => setTimeout(r, 10000));
+        }
       }
-
-    } catch (err) {
-      console.log("⚠️ Reintentando...");
+    } catch (e) {
+      console.log("Fallo de red, reintentando...");
       await new Promise(r => setTimeout(r, 10000));
     }
   }
 }
 
-ejecutar();
+mintear();
