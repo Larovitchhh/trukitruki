@@ -1,27 +1,24 @@
 import pkg from '@stacks/transactions';
 const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode } = pkg;
 import fetch from 'node-fetch';
-import fs from 'fs';
 
+// ESTA ES LA CLAVE QUE ME PASASTE TÚ
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
-const NONCE_FILE = './nonce_state.txt';
-
-// Función para leer el nonce guardado
-function getSavedNonce() {
-    if (fs.existsSync(NONCE_FILE)) {
-        return parseInt(fs.readFileSync(NONCE_FILE, 'utf8'));
-    }
-    return 28; // Empezamos en el 28 que es el que toca
-}
+const DIRECCION = "SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G";
 
 async function ejecutar() {
-  console.log("=== BOT BÚNKER: RESISTENTE A REINICIOS ===");
+  console.log(`=== ARRANCANDO CON TU WALLET REAL: ${DIRECCION} ===`);
   
-  let nonce = getSavedNonce();
-
   while (true) {
     try {
-      console.log(`📡 Intentando Nonce: ${nonce}`);
+      // 1. Forzamos a pedir el nonce directamente al nodo para no fallar
+      const resAcc = await fetch(`https://api.mainnet.hiro.so/v2/accounts/${DIRECCION}?proof=0`);
+      const accData = await resAcc.json();
+      
+      // Si la red está atascada, este nonce nos dirá la verdad
+      let currentNonce = accData.nonce;
+
+      console.log(`📡 Nodo dice que tu Nonce es: ${currentNonce}`);
 
       const txOptions = {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
@@ -29,8 +26,8 @@ async function ejecutar() {
         functionName: 'mint-activity',
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
-        nonce: nonce,
-        fee: 20000, // Subimos el fee para que la red la quiera minar rápido
+        nonce: currentNonce,
+        fee: 6000, 
         network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
         anchorMode: AnchorMode.Any,
         postConditionMode: PostConditionMode.Allow
@@ -46,26 +43,22 @@ async function ejecutar() {
       const texto = await res.text();
       
       if (res.ok) {
-        console.log(`✅ [Nonce ${nonce}] LANZADA CON ÉXITO.`);
-        nonce++;
-        fs.writeFileSync(NONCE_FILE, nonce.toString());
-        console.log("⏳ Esperando 15 MINUTOS. No toques nada, deja que la red procese.");
-        await new Promise(r => setTimeout(r, 900000)); // 15 minutos reales
+        console.log(`✅ [Nonce ${currentNonce}] LANZADA: ${texto}`);
+        // Esperamos 2 minutos para que el nodo de Hiro no te bloquee por Chaining
+        await new Promise(r => setTimeout(r, 120000));
       } else {
-        console.log(`❌ Error del Nodo: ${texto}`);
+        console.log(`❌ Error: ${texto}`);
+        // Si sale el maldito Chaining, esperamos 5 minutos para que respire
         if (texto.includes("TooMuchChaining")) {
-           console.log("⚠️ Cola llena. El nodo tiene la anterior pero no la suelta. Esperando 10 min...");
-           await new Promise(r => setTimeout(r, 600000));
-        } else if (texto.includes("NonceAlreadyUsed")) {
-           nonce++;
-           fs.writeFileSync(NONCE_FILE, nonce.toString());
+           await new Promise(r => setTimeout(r, 300000));
         } else {
-           await new Promise(r => setTimeout(r, 30000));
+           await new Promise(r => setTimeout(r, 20000));
         }
       }
-    } catch (e) {
-      console.log("Fallo de conexión, reintentando en 30s...");
-      await new Promise(r => setTimeout(r, 30000));
+
+    } catch (err) {
+      console.log("Fallo de conexión, reintentando...");
+      await new Promise(r => setTimeout(r, 10000));
     }
   }
 }
