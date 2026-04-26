@@ -1,21 +1,21 @@
 import pkg from '@stacks/transactions';
 const { makeContractCall, stringAsciiCV, uintCV, AnchorMode, PostConditionMode, broadcastTransaction } = pkg;
-import { StacksMainnet } from '@stacks/network';
 
+// USAMOS EL NODO OFICIAL DE LA FUNDACIÓN, NO EL DE HIRO
+const API_URL = "https://stacks-node-api.mainnet.stacks.co";
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
-const network = new StacksMainnet();
 
 async function ejecutar() {
-  console.log("=== ARRANCANDO BOT MODO NATIVO ===");
+  console.log("=== USANDO NODO OFICIAL DE LA FUNDACIÓN (ANTI-LAG) ===");
   
-  // Obtenemos el nonce una sola vez para empezar limpio
-  const res = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G/nonces`);
-  const data = await res.json();
-  let currentNonce = data.possible_next_nonce;
-
   while (true) {
     try {
-      console.log(`🚀 Lanzando Nonce: ${currentNonce}`);
+      // Consultamos el nonce real en el nodo de la fundación
+      const res = await fetch(`${API_URL}/v2/accounts/SP2GCQYZE737A6BMK827BQKVX1WWFKFQX2RKQDK3G?proof=0`);
+      const data = await res.json();
+      let currentNonce = data.nonce;
+
+      console.log(`📡 Nonce real detectado: ${currentNonce}`);
 
       const txOptions = {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
@@ -23,33 +23,37 @@ async function ejecutar() {
         functionName: 'mint-activity',
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
-        validateWithAbi: true, // Esto obliga al bot a verificar que la función existe antes de mandar basura
-        network,
         nonce: currentNonce,
-        fee: 4000, // Tu fee estándar, sin locuras
+        fee: 5000, 
+        network: { version: 0x00, chainId: 1, coreApiUrl: API_URL },
         anchorMode: AnchorMode.Any,
         postConditionMode: PostConditionMode.Allow,
       };
 
       const transaction = await makeContractCall(txOptions);
-      const response = await broadcastTransaction(transaction, network);
+      
+      const response = await fetch(`${API_URL}/v2/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: transaction.serialize()
+      });
 
-      // Si la respuesta tiene un error, lo tratamos aquí
-      if (response.error) {
-        console.log(`❌ Error: ${response.reason || response.error}`);
-        if (response.reason === 'NonceAlreadyUsed') {
-          currentNonce++;
+      const result = await response.json();
+
+      if (result.error) {
+        console.log(`❌ Nodo: ${result.reason || result.error}`);
+        // Si la red está saturada de tus propias TXs, esperamos
+        if (result.reason === 'TooMuchChaining') {
+            console.log("⏳ La red tiene 25 TXs tuyas en cola. Esperando 5 min...");
+            await new Promise(r => setTimeout(r, 300000));
         }
-        await new Promise(r => setTimeout(r, 10000));
       } else {
-        console.log(`✅ TXID: 0x${response.txid}`);
-        currentNonce++;
-        // Esperamos 45 segundos, lo normal
-        await new Promise(r => setTimeout(r, 45000));
+        console.log(`✅ TX ENVIADA: 0x${result}`);
+        await new Promise(r => setTimeout(r, 60000));
       }
 
     } catch (err) {
-      console.log("⚠️ Fallo en el bucle, reintentando...");
+      console.log("⚠️ Reintentando...");
       await new Promise(r => setTimeout(r, 10000));
     }
   }
