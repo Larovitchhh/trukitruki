@@ -4,18 +4,11 @@ import fetch from 'node-fetch';
 
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
 
-// Lista de nodos alternativos para forzar la salida
-const NODOS = [
-  "https://stacks-node-api.mainnet.stacks.co",
-  "https://api.mainnet.hiro.so",
-  "https://stacks-node.blockstack.org"
-];
-
 async function mintear() {
-  console.log("=== FORZANDO SALIDA MULTI-NODO ===");
+  console.log("=== ARRANCANDO DESDE NONCE 28 (EL QUE PIDE LA RED) ===");
   
-  // Vamos a intentar desde la 24 por si las anteriores se perdieron de verdad
-  let nonce = 24; 
+  // La red espera el 28 según tu último log.
+  let nonce = 28; 
 
   while (true) {
     try {
@@ -26,38 +19,37 @@ async function mintear() {
         functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
         nonce: nonce,
-        fee: 15000, 
+        fee: 5000, 
         network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
         anchorMode: AnchorMode.Any,
         postConditionMode: PostConditionMode.Allow
       };
 
       const tx = await makeContractCall(txOptions);
-      const rawTx = tx.serialize();
+      const res = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: tx.serialize()
+      });
 
-      console.log(`[Nonce ${nonce}] Probando en todos los nodos...`);
-
-      for (const url of NODOS) {
-        try {
-          const res = await fetch(`${url}/v2/transactions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: rawTx
-          });
-          const resText = await res.text();
-          console.log(` > Nodo ${url}: ${resText}`);
-        } catch (e) {
-          console.log(` > Nodo ${url}: Error de conexión`);
+      const texto = await res.text();
+      
+      if (res.ok) {
+        console.log(`[Nonce ${nonce}] ✅ LANZADA: ${texto}`);
+        nonce++; // Avanzamos al 29, 30...
+        await new Promise(r => setTimeout(r, 45000));
+      } else {
+        console.log(`[Nonce ${nonce}] ❌ ERROR: ${texto}`);
+        // Si el nonce ya se usó (porque se confirmó rápido), saltamos
+        if (texto.includes("NonceAlreadyUsed")) {
+          nonce++;
+        } else {
+          // Si es TooMuchChaining, esperamos a que la red trague
+          await new Promise(r => setTimeout(r, 30000));
         }
       }
-
-      // Si algún nodo (que no sea el de Hiro) la acepta, avanzamos
-      // Si todos dan error de Nonce o Chaining, ajustamos
-      nonce++;
-      await new Promise(r => setTimeout(r, 45000));
-
     } catch (e) {
-      console.log("Error:", e.message);
+      console.log("Error de conexión, reintentando...");
       await new Promise(r => setTimeout(r, 10000));
     }
   }
