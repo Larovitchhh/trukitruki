@@ -5,10 +5,9 @@ import fetch from 'node-fetch';
 const PRIVATE_KEY = "ccada837a66ff06e2ba5982ef0e105609ca19cbd523b5ca06edffe1aa9fc094201";
 
 async function ejecutar() {
-  console.log("=== MODO CLON MANUAL (ÚLTIMO INTENTO) ===");
+  console.log("=== MODO ANTIFILTRO: RITMO LENTO (10 MIN) ===");
   
-  // Ponemos el 28 que es el que te pedía la red
-  let nonce = 28;
+  let nonce = 28; // El que está esperando la red
 
   while (true) {
     try {
@@ -16,54 +15,43 @@ async function ejecutar() {
         contractAddress: "SP1AJVMEGSMD6QCSZ1669Z5G90GEHVK2MEM7J0AHH",
         contractName: "onchainkms-stacks",
         functionName: 'mint-activity',
-        // Simplificamos los argumentos al máximo
-        functionArgs: [
-          stringAsciiCV("run"),
-          uintCV(11),
-          uintCV(67),
-          uintCV(102),
-          uintCV(103)
-        ],
+        functionArgs: [stringAsciiCV("run"), uintCV(11), uintCV(67), uintCV(102), uintCV(103)],
         senderKey: PRIVATE_KEY,
         nonce: nonce,
-        fee: 12000, 
+        fee: 15000, // Subimos el fee para que el nodo tenga incentivo de soltarla
         network: { version: 0x00, chainId: 1, coreApiUrl: 'https://api.mainnet.hiro.so' },
         anchorMode: AnchorMode.Any,
         postConditionMode: PostConditionMode.Allow
       };
 
       const tx = await makeContractCall(txOptions);
-      const serializedTx = tx.serialize();
-
-      // Usamos el endpoint de Hiro que es el único que te deja conectar desde Railway
       const res = await fetch('https://api.mainnet.hiro.so/v2/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: serializedTx
+        body: tx.serialize()
       });
 
-      const responseText = await res.text();
+      const texto = await res.text();
       
       if (res.ok) {
-        console.log(`[Nonce ${nonce}] ✅ LANZADA: ${responseText}`);
+        console.log(`[Nonce ${nonce}] ✅ LANZADA. Esperando 10 min para que la red la trague...`);
         nonce++;
-        // Esperamos 2 minutos. Si la red está lenta, darle prisa solo genera TooMuchChaining.
-        await new Promise(r => setTimeout(r, 120000));
+        // 10 MINUTOS DE ESPERA (600.000 ms)
+        await new Promise(r => setTimeout(r, 600000));
       } else {
-        console.log(`[Nonce ${nonce}] ❌ ERROR: ${responseText}`);
-        
-        if (responseText.includes("TooMuchChaining")) {
-           console.log("Cola llena. Esperando a que el nodo procese...");
-           await new Promise(r => setTimeout(r, 300000)); // 5 minutos de calma
-        } else if (responseText.includes("NonceAlreadyUsed")) {
+        console.log(`[Nonce ${nonce}] ❌ Nodo bloqueado: ${texto}`);
+        if (texto.includes("TooMuchChaining")) {
+           console.log("⏳ La red está saturada. Reintento en 5 minutos...");
+           await new Promise(r => setTimeout(r, 300000));
+        } else if (texto.includes("NonceAlreadyUsed")) {
            nonce++;
         } else {
-           await new Promise(r => setTimeout(r, 10000));
+           await new Promise(r => setTimeout(r, 20000));
         }
       }
     } catch (e) {
-      console.log("Fallo de conexión, reintentando...");
-      await new Promise(r => setTimeout(r, 10000));
+      console.log("Fallo de conexión...");
+      await new Promise(r => setTimeout(r, 20000));
     }
   }
 }
